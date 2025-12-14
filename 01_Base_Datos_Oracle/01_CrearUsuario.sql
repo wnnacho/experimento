@@ -1,0 +1,9 @@
+-- NOTA: Este script es solo para desarrollo/pruebas
+-- En producción, usar contraseñas seguras y gestión apropiada de credenciales
+CREATE USER test123 IDENTIFIED BY "Buh123456789"
+DEFAULT TABLESPACE "USERS"
+TEMPORARY TABLESPACE "TEMP";
+ALTER USER test123 QUOTA UNLIMITED ON USERS;
+GRANT CREATE SESSION TO test123;
+GRANT "RESOURCE" TO test123;
+ALTER USER test123 DEFAULT ROLE "RESOURCE";
