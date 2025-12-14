@@ -19,6 +19,7 @@ SELECT i.inventario_id, p.nombre, i.stock_actual, i.stock_minimo
 FROM inventario i
 JOIN productos p ON i.prod_id = p.prod_id
 WHERE i.prod_id = 101;
+/
 
 -- Insertar una nueva orden que activará el trigger
 -- Esto debería reducir el stock del producto 101 (Laptop Lenovo)
@@ -33,6 +34,7 @@ SELECT i.inventario_id, p.nombre, i.stock_actual, i.stock_minimo
 FROM inventario i
 JOIN productos p ON i.prod_id = p.prod_id
 WHERE i.prod_id = 101;
+/
 
 COMMIT;
 
@@ -92,6 +94,7 @@ SELECT i.inventario_id, p.nombre, i.stock_actual, i.stock_minimo
 FROM inventario i
 JOIN productos p ON i.prod_id = p.prod_id
 WHERE i.prod_id = 106;
+/
 
 COMMIT;
 
@@ -103,8 +106,11 @@ DBMS_OUTPUT.PUT_LINE('');
 
 -- Probar la función de validación de stock
 SELECT fn_valida_stock(101) AS "Estado Laptop" FROM DUAL;
+/
 SELECT fn_valida_stock(106) AS "Estado Impresora" FROM DUAL;
+/
 SELECT fn_valida_stock(102) AS "Estado Mouse" FROM DUAL;
+/
 
 DBMS_OUTPUT.PUT_LINE('');
 DBMS_OUTPUT.PUT_LINE('========================================');

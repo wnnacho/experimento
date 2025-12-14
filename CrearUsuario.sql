@@ -1,3 +1,5 @@
+-- NOTA: Este script es solo para desarrollo/pruebas
+-- En producción, usar contraseñas seguras y gestión apropiada de credenciales
 CREATE USER test123 IDENTIFIED BY "Buh123456789"
 DEFAULT TABLESPACE "USERS"
 TEMPORARY TABLESPACE "TEMP";

@@ -3,6 +3,8 @@
 -- ========================================
 
 -- 1. VARRAY: Para almacenar múltiples métodos de pago de un cliente
+-- Límite de 5 métodos: suficiente para casos típicos (Tarjeta Crédito, Débito, 
+-- Transferencia, Efectivo, PayPal) sin consumir excesiva memoria
 CREATE OR REPLACE TYPE t_metodos_pago AS VARRAY(5) OF VARCHAR2(50);
 /
 
@@ -22,10 +24,6 @@ DECLARE
     v_stock_actual NUMBER;
     v_stock_minimo NUMBER;
     v_nombre_producto VARCHAR2(100);
-    
-    -- Excepción personalizada para stock bajo
-    ex_stock_bajo EXCEPTION;
-    PRAGMA EXCEPTION_INIT(ex_stock_bajo, -20001);
 BEGIN
     -- Actualizar el stock en la tabla de inventario
     UPDATE inventario
