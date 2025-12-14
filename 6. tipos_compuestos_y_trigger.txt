@@ -1,0 +1,177 @@
+-- ========================================
+-- TIPOS DE DATOS COMPUESTOS
+-- ========================================
+
+-- 1. VARRAY: Para almacenar múltiples métodos de pago de un cliente
+-- Límite de 5 métodos: suficiente para casos típicos (Tarjeta Crédito, Débito, 
+-- Transferencia, Efectivo, PayPal) sin consumir excesiva memoria
+CREATE OR REPLACE TYPE t_metodos_pago AS VARRAY(5) OF VARCHAR2(50);
+/
+
+-- 2. RECORD (usando TYPE dentro de package para demostrar uso)
+-- Este RECORD se usará en el package para agrupar información de cliente
+
+-- ========================================
+-- TRIGGER: Control de inventario
+-- ========================================
+
+-- Trigger que actualiza automáticamente el inventario cuando se crea una orden
+-- y genera una alerta si el stock queda bajo el mínimo
+CREATE OR REPLACE TRIGGER trg_actualiza_inventario
+AFTER INSERT ON detalle_orden
+FOR EACH ROW
+DECLARE
+    v_stock_actual NUMBER;
+    v_stock_minimo NUMBER;
+    v_nombre_producto VARCHAR2(100);
+BEGIN
+    -- Actualizar el stock en la tabla de inventario
+    UPDATE inventario
+    SET stock_actual = stock_actual - :NEW.cantidad
+    WHERE prod_id = :NEW.prod_id;
+    
+    -- Verificar si el stock quedó bajo el mínimo
+    SELECT i.stock_actual, i.stock_minimo, p.nombre
+    INTO v_stock_actual, v_stock_minimo, v_nombre_producto
+    FROM inventario i
+    JOIN productos p ON p.prod_id = i.prod_id
+    WHERE i.prod_id = :NEW.prod_id;
+    
+    IF v_stock_actual < v_stock_minimo THEN
+        DBMS_OUTPUT.PUT_LINE('ALERTA: Stock bajo para producto ' || v_nombre_producto || 
+                            ' (Stock actual: ' || v_stock_actual || 
+                            ', Stock mínimo: ' || v_stock_minimo || ')');
+    END IF;
+    
+EXCEPTION
+    WHEN NO_DATA_FOUND THEN
+        DBMS_OUTPUT.PUT_LINE('Producto ' || :NEW.prod_id || ' no encontrado en inventario');
+    WHEN OTHERS THEN
+        DBMS_OUTPUT.PUT_LINE('Error en trigger: ' || SQLERRM);
+        RAISE;
+END;
+/
+
+-- ========================================
+-- PACKAGE CON USO DE RECORD
+-- ========================================
+
+CREATE OR REPLACE PACKAGE pkg_gestion_clientes AS
+    
+    -- Definición de RECORD para información del cliente
+    TYPE t_cliente_record IS RECORD (
+        cliente_id    clientes.cliente_id%TYPE,
+        nombre        clientes.nombre%TYPE,
+        correo        clientes.correo%TYPE,
+        total_ordenes NUMBER,
+        total_gastado NUMBER,
+        metodos_pago  t_metodos_pago  -- Uso del VARRAY
+    );
+    
+    -- Función que retorna información completa del cliente usando RECORD
+    FUNCTION fn_info_cliente(p_cliente_id NUMBER) RETURN t_cliente_record;
+    
+    -- Procedimiento que muestra información de clientes usando RECORD y VARRAY
+    PROCEDURE prc_reporte_clientes;
+    
+END pkg_gestion_clientes;
+/
+
+CREATE OR REPLACE PACKAGE BODY pkg_gestion_clientes AS
+    
+    -- Implementación de función que retorna RECORD con info del cliente
+    FUNCTION fn_info_cliente(p_cliente_id NUMBER) RETURN t_cliente_record IS
+        v_cliente t_cliente_record;
+        v_metodos t_metodos_pago := t_metodos_pago(); -- Inicializar VARRAY vacío
+        v_count NUMBER := 0;
+    BEGIN
+        -- Obtener datos básicos del cliente
+        SELECT c.cliente_id, c.nombre, c.correo,
+               COUNT(DISTINCT o.orden_id) AS total_ordenes,
+               NVL(SUM(d.cantidad * p.precio), 0) AS total_gastado
+        INTO v_cliente.cliente_id, v_cliente.nombre, v_cliente.correo,
+             v_cliente.total_ordenes, v_cliente.total_gastado
+        FROM clientes c
+        LEFT JOIN ordenes o ON c.cliente_id = o.cliente_id
+        LEFT JOIN detalle_orden d ON o.orden_id = d.orden_id
+        LEFT JOIN productos p ON d.prod_id = p.prod_id
+        WHERE c.cliente_id = p_cliente_id
+        GROUP BY c.cliente_id, c.nombre, c.correo;
+        
+        -- Obtener métodos de pago únicos del cliente (llenando VARRAY)
+        FOR metodo IN (
+            SELECT DISTINCT pg.metodo
+            FROM pagos pg
+            JOIN ordenes o ON pg.orden_id = o.orden_id
+            WHERE o.cliente_id = p_cliente_id
+            ORDER BY pg.metodo
+        ) LOOP
+            v_count := v_count + 1;
+            v_metodos.EXTEND; -- Extender el VARRAY
+            v_metodos(v_count) := metodo.metodo;
+        END LOOP;
+        
+        v_cliente.metodos_pago := v_metodos;
+        
+        RETURN v_cliente;
+        
+    EXCEPTION
+        WHEN NO_DATA_FOUND THEN
+            DBMS_OUTPUT.PUT_LINE('Cliente no encontrado');
+            RETURN NULL;
+        WHEN OTHERS THEN
+            DBMS_OUTPUT.PUT_LINE('Error: ' || SQLERRM);
+            RETURN NULL;
+    END fn_info_cliente;
+    
+    -- Procedimiento que usa RECORD y VARRAY para generar reporte
+    PROCEDURE prc_reporte_clientes IS
+        v_cliente t_cliente_record;
+        v_metodos_str VARCHAR2(500);
+        
+        CURSOR c_clientes IS
+            SELECT cliente_id FROM clientes;
+            
+    BEGIN
+        DBMS_OUTPUT.PUT_LINE('========================================');
+        DBMS_OUTPUT.PUT_LINE('REPORTE DE CLIENTES CON TIPOS COMPUESTOS');
+        DBMS_OUTPUT.PUT_LINE('========================================');
+        DBMS_OUTPUT.PUT_LINE('');
+        
+        FOR cliente IN c_clientes LOOP
+            v_cliente := fn_info_cliente(cliente.cliente_id);
+            
+            IF v_cliente.cliente_id IS NOT NULL THEN
+                DBMS_OUTPUT.PUT_LINE('Cliente: ' || v_cliente.nombre);
+                DBMS_OUTPUT.PUT_LINE('  ID: ' || v_cliente.cliente_id);
+                DBMS_OUTPUT.PUT_LINE('  Email: ' || v_cliente.correo);
+                DBMS_OUTPUT.PUT_LINE('  Total Órdenes: ' || v_cliente.total_ordenes);
+                DBMS_OUTPUT.PUT_LINE('  Total Gastado: $' || v_cliente.total_gastado);
+                
+                -- Mostrar métodos de pago (VARRAY)
+                IF v_cliente.metodos_pago IS NOT NULL AND v_cliente.metodos_pago.COUNT > 0 THEN
+                    v_metodos_str := '';
+                    FOR i IN 1..v_cliente.metodos_pago.COUNT LOOP
+                        v_metodos_str := v_metodos_str || v_cliente.metodos_pago(i);
+                        IF i < v_cliente.metodos_pago.COUNT THEN
+                            v_metodos_str := v_metodos_str || ', ';
+                        END IF;
+                    END LOOP;
+                    DBMS_OUTPUT.PUT_LINE('  Métodos de Pago: ' || v_metodos_str);
+                ELSE
+                    DBMS_OUTPUT.PUT_LINE('  Métodos de Pago: Sin pagos registrados');
+                END IF;
+                
+                DBMS_OUTPUT.PUT_LINE('');
+            END IF;
+        END LOOP;
+        
+        DBMS_OUTPUT.PUT_LINE('========================================');
+        
+    EXCEPTION
+        WHEN OTHERS THEN
+            DBMS_OUTPUT.PUT_LINE('Error en reporte: ' || SQLERRM);
+    END prc_reporte_clientes;
+    
+END pkg_gestion_clientes;
+/

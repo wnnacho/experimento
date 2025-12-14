@@ -1,0 +1,118 @@
+-- ========================================
+-- SCRIPT DE EJECUCIÓN Y PRUEBAS
+-- Tipos Compuestos (VARRAY y RECORD) y Trigger
+-- ========================================
+
+SET SERVEROUTPUT ON SIZE 1000000;
+
+-- Limpiar tabla de reporte
+DELETE FROM reporte_ventas_vendedores;
+COMMIT;
+
+DBMS_OUTPUT.PUT_LINE('========================================');
+DBMS_OUTPUT.PUT_LINE('PRUEBA 1: TRIGGER - Actualización de Inventario');
+DBMS_OUTPUT.PUT_LINE('========================================');
+DBMS_OUTPUT.PUT_LINE('');
+
+-- Ver estado actual del inventario antes de la prueba
+SELECT i.inventario_id, p.nombre, i.stock_actual, i.stock_minimo
+FROM inventario i
+JOIN productos p ON i.prod_id = p.prod_id
+WHERE i.prod_id = 101;
+/
+
+-- Insertar una nueva orden que activará el trigger
+-- Esto debería reducir el stock del producto 101 (Laptop Lenovo)
+INSERT INTO ordenes VALUES (309, 201, SYSDATE);
+INSERT INTO detalle_orden VALUES (415, 309, 101, 5); -- Compra de 5 laptops
+
+DBMS_OUTPUT.PUT_LINE('Nueva orden insertada - El trigger debe actualizar el inventario');
+DBMS_OUTPUT.PUT_LINE('');
+
+-- Ver el inventario después del trigger
+SELECT i.inventario_id, p.nombre, i.stock_actual, i.stock_minimo
+FROM inventario i
+JOIN productos p ON i.prod_id = p.prod_id
+WHERE i.prod_id = 101;
+/
+
+COMMIT;
+
+DBMS_OUTPUT.PUT_LINE('');
+DBMS_OUTPUT.PUT_LINE('========================================');
+DBMS_OUTPUT.PUT_LINE('PRUEBA 2: VARRAY y RECORD - Reporte de Clientes');
+DBMS_OUTPUT.PUT_LINE('========================================');
+DBMS_OUTPUT.PUT_LINE('');
+
+-- Ejecutar procedimiento que usa RECORD y VARRAY
+EXEC pkg_gestion_clientes.prc_reporte_clientes;
+
+DBMS_OUTPUT.PUT_LINE('');
+DBMS_OUTPUT.PUT_LINE('========================================');
+DBMS_OUTPUT.PUT_LINE('PRUEBA 3: Función que retorna RECORD');
+DBMS_OUTPUT.PUT_LINE('========================================');
+DBMS_OUTPUT.PUT_LINE('');
+
+-- Probar la función individual para un cliente específico
+DECLARE
+    v_cliente pkg_gestion_clientes.t_cliente_record;
+BEGIN
+    v_cliente := pkg_gestion_clientes.fn_info_cliente(201);
+    
+    DBMS_OUTPUT.PUT_LINE('Información del Cliente 201:');
+    DBMS_OUTPUT.PUT_LINE('  Nombre: ' || v_cliente.nombre);
+    DBMS_OUTPUT.PUT_LINE('  Email: ' || v_cliente.correo);
+    DBMS_OUTPUT.PUT_LINE('  Total Órdenes: ' || v_cliente.total_ordenes);
+    DBMS_OUTPUT.PUT_LINE('  Total Gastado: $' || v_cliente.total_gastado);
+    
+    IF v_cliente.metodos_pago IS NOT NULL THEN
+        DBMS_OUTPUT.PUT_LINE('  Cantidad de Métodos de Pago: ' || v_cliente.metodos_pago.COUNT);
+        FOR i IN 1..v_cliente.metodos_pago.COUNT LOOP
+            DBMS_OUTPUT.PUT_LINE('    Método ' || i || ': ' || v_cliente.metodos_pago(i));
+        END LOOP;
+    END IF;
+END;
+/
+
+DBMS_OUTPUT.PUT_LINE('');
+DBMS_OUTPUT.PUT_LINE('========================================');
+DBMS_OUTPUT.PUT_LINE('PRUEBA 4: Trigger con Stock Bajo');
+DBMS_OUTPUT.PUT_LINE('========================================');
+DBMS_OUTPUT.PUT_LINE('');
+
+-- Insertar orden que dejará el stock bajo el mínimo
+-- Producto 106 (Impresora HP) tiene stock_actual=10, stock_minimo=3
+INSERT INTO ordenes VALUES (310, 202, SYSDATE);
+INSERT INTO detalle_orden VALUES (416, 310, 106, 8); -- Compra de 8 impresoras
+
+DBMS_OUTPUT.PUT_LINE('Orden insertada que dejará stock bajo el mínimo');
+DBMS_OUTPUT.PUT_LINE('El trigger debe mostrar una ALERTA');
+DBMS_OUTPUT.PUT_LINE('');
+
+-- Ver el inventario después
+SELECT i.inventario_id, p.nombre, i.stock_actual, i.stock_minimo
+FROM inventario i
+JOIN productos p ON i.prod_id = p.prod_id
+WHERE i.prod_id = 106;
+/
+
+COMMIT;
+
+DBMS_OUTPUT.PUT_LINE('');
+DBMS_OUTPUT.PUT_LINE('========================================');
+DBMS_OUTPUT.PUT_LINE('PRUEBA 5: Validación de Stock con Función');
+DBMS_OUTPUT.PUT_LINE('========================================');
+DBMS_OUTPUT.PUT_LINE('');
+
+-- Probar la función de validación de stock
+SELECT fn_valida_stock(101) AS "Estado Laptop" FROM DUAL;
+/
+SELECT fn_valida_stock(106) AS "Estado Impresora" FROM DUAL;
+/
+SELECT fn_valida_stock(102) AS "Estado Mouse" FROM DUAL;
+/
+
+DBMS_OUTPUT.PUT_LINE('');
+DBMS_OUTPUT.PUT_LINE('========================================');
+DBMS_OUTPUT.PUT_LINE('TODAS LAS PRUEBAS COMPLETADAS');
+DBMS_OUTPUT.PUT_LINE('========================================');
